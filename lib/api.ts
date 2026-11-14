@@ -32,8 +32,13 @@ import type {
 } from './store.ts';
 import { VIEWER } from './identity.ts';
 
+const userJsonByBase = new Map<string, Record<string, unknown>>();
+
 export function userJson(base: string): Record<string, unknown> {
-  return {
+  // The viewer object never changes; build it once per origin and share it.
+  const cached = userJsonByBase.get(base);
+  if (cached) return cached;
+  const built: Record<string, unknown> = {
     login: VIEWER.login,
     id: VIEWER.numericId,
     node_id: userNodeId(),
@@ -43,6 +48,8 @@ export function userJson(base: string): Record<string, unknown> {
     html_url: `${base}/${VIEWER.login}`,
     url: `${base}/api/v3/users/${VIEWER.login}`,
   };
+  userJsonByBase.set(base, built);
+  return built;
 }
 
 export function repoJson(forge: Forge, repo: RepoRecord, base: string): Record<string, unknown> {

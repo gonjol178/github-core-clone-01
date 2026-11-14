@@ -97,6 +97,24 @@ export function parseCommit(body: Buffer): CommitInfo {
   return { tree, parents, author, committer, message };
 }
 
+const commitInfoCache = new WeakMap<ObjectStore, Map<string, CommitInfo>>();
+
+/** parseCommit with a per-store memo: history walks re-read the same commits. */
+export function parseCommitOf(store: ObjectStore, oid: string): CommitInfo | null {
+  let perStore = commitInfoCache.get(store);
+  if (!perStore) {
+    perStore = new Map();
+    commitInfoCache.set(store, perStore);
+  }
+  const cached = perStore.get(oid);
+  if (cached) return cached;
+  const obj = store.get(oid);
+  if (!obj || obj.type !== 'commit') return null;
+  const info = parseCommit(obj.body);
+  perStore.set(oid, info);
+  return info;
+}
+
 export function buildCommit(info: CommitInfo): Buffer {
   const lines: string[] = [`tree ${info.tree}`];
   for (const parent of info.parents) lines.push(`parent ${parent}`);
@@ -323,9 +341,9 @@ export function commitDistances(store: ObjectStore, tip: string): Map<string, nu
     depth += 1;
     const next: string[] = [];
     for (const oid of frontier) {
-      const obj = store.get(oid);
-      if (!obj || obj.type !== 'commit') continue;
-      for (const parent of parseCommit(obj.body).parents) {
+      const info = parseCommitOf(store, oid);
+      if (!info) continue;
+      for (const parent of info.parents) {
         if (!distances.has(parent)) {
           distances.set(parent, depth);
           next.push(parent);
@@ -344,9 +362,9 @@ export function isAncestor(store: ObjectStore, ancestor: string, descendant: str
   const queue = [descendant];
   while (queue.length > 0) {
     const oid = queue.pop() as string;
-    const obj = store.get(oid);
-    if (!obj || obj.type !== 'commit') continue;
-    for (const parent of parseCommit(obj.body).parents) {
+    const info = parseCommitOf(store, oid);
+    if (!info) continue;
+    for (const parent of info.parents) {
       if (parent === ancestor) return true;
       if (!seen.has(parent)) {
         seen.add(parent);
@@ -387,24 +405,21 @@ export function listHistory(store: ObjectStore, tip: string): string[] {
   while (stack.length > 0) {
     const oid = stack.pop() as string;
     if (reachable.has(oid)) continue;
-    const obj = store.get(oid);
-    if (!obj || obj.type !== 'commit') continue;
+    const info = parseCommitOf(store, oid);
+    if (!info) continue;
     reachable.add(oid);
-    for (const parent of parseCommit(obj.body).parents) stack.push(parent);
+    for (const parent of info.parents) stack.push(parent);
   }
   const childCount = new Map<string, number>();
   for (const oid of reachable) childCount.set(oid, 0);
   for (const oid of reachable) {
-    const obj = store.get(oid);
-    if (!obj) continue;
-    for (const parent of parseCommit(obj.body).parents) {
+    const info = parseCommitOf(store, oid);
+    if (!info) continue;
+    for (const parent of info.parents) {
       if (childCount.has(parent)) childCount.set(parent, (childCount.get(parent) ?? 0) + 1);
     }
   }
-  const timeOf = (oid: string): number => {
-    const obj = store.get(oid);
-    return obj ? parseCommit(obj.body).committer.time : 0;
-  };
+  const timeOf = (oid: string): number => parseCommitOf(store, oid)?.committer.time ?? 0;
   const ready: string[] = [];
   for (const [oid, count] of childCount) if (count === 0) ready.push(oid);
   const out: string[] = [];
@@ -415,9 +430,9 @@ export function listHistory(store: ObjectStore, tip: string): string[] {
     }
     const oid = ready.splice(pick, 1)[0];
     out.push(oid);
-    const obj = store.get(oid);
-    if (!obj) continue;
-    for (const parent of parseCommit(obj.body).parents) {
+    const info = parseCommitOf(store, oid);
+    if (!info) continue;
+    for (const parent of info.parents) {
       if (!childCount.has(parent)) continue;
       const left = (childCount.get(parent) ?? 0) - 1;
       childCount.set(parent, left);

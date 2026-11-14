@@ -8,6 +8,7 @@ import { deflateSync, inflateSync } from 'node:zlib';
 import {
   hashObject,
   parseCommit,
+  parseCommitOf,
   parseTag,
   peelToCommit,
 } from './git.ts';
@@ -455,11 +456,11 @@ export function planFetch(
   }
   while (haveQueue.length > 0) {
     const oid = haveQueue.pop() as string;
-    const obj = store.get(oid);
-    if (!obj || obj.type !== 'commit') continue;
-    addHaveTree(parseCommit(obj.body).tree);
+    const info = parseCommitOf(store, oid);
+    if (!info) continue;
+    addHaveTree(info.tree);
     if (clientShallow.has(oid)) continue;
-    for (const parent of parseCommit(obj.body).parents) {
+    for (const parent of info.parents) {
       if (!have.has(parent)) {
         have.add(parent);
         haveQueue.push(parent);
@@ -507,14 +508,17 @@ export function planFetch(
   let step = 0;
   while (frontier.length > 0) {
     step += 1;
+    // With a depth limit, commits at the limit are recorded (the boundary
+    // test needs them) but never expanded: nothing below them can be sent.
+    const expand = depth === null || step < depth;
     const next: string[] = [];
     for (const oid of frontier) {
-      const obj = store.get(oid);
-      if (!obj || obj.type !== 'commit') continue;
-      for (const parent of parseCommit(obj.body).parents) {
+      const info = parseCommitOf(store, oid);
+      if (!info) continue;
+      for (const parent of info.parents) {
         if (!distance.has(parent)) {
           distance.set(parent, step);
-          next.push(parent);
+          if (expand) next.push(parent);
         }
       }
     }
@@ -527,11 +531,8 @@ export function planFetch(
     if (depth !== null && dist >= depth) continue;
     included.add(oid);
     if (depth !== null && dist === depth - 1) {
-      const obj = store.get(oid);
-      if (obj && obj.type === 'commit') {
-        const parents = parseCommit(obj.body).parents;
-        if (parents.some((p) => store.has(p) && !included.has(p))) shallow.push(oid);
-      }
+      const info = parseCommitOf(store, oid);
+      if (info && info.parents.some((p) => store.has(p) && !included.has(p))) shallow.push(oid);
     }
   }
   const unshallow: string[] = [];
@@ -552,9 +553,9 @@ export function planFetch(
   for (const oid of commitsByDistance) emit(oid);
   for (const oid of extraRoots) emit(oid);
   for (const oid of commitsByDistance) {
-    const obj = store.get(oid);
-    if (!obj || obj.type !== 'commit') continue;
-    for (const treeOid of treeClosure(store, parseCommit(obj.body).tree)) emit(treeOid);
+    const info = parseCommitOf(store, oid);
+    if (!info) continue;
+    for (const treeOid of treeClosure(store, info.tree)) emit(treeOid);
   }
   return { objects, shallow, unshallow };
 }
