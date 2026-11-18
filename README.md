@@ -1,5 +1,9 @@
 # github-core-clone-01 — a GitHub-compatible git forge
 
+[![make.fun · github-core-clone-01](https://make.fun/badge/github-core-clone-01.svg)](https://make.fun/bounty/github-core-clone-01?utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01)
+[![rank](https://make.fun/badge/github-core-clone-01/gonjol178/github-core-clone-01/rank.svg)](https://make.fun/bounty/github-core-clone-01/leaderboard?utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01)
+[![reward](https://make.fun/badge/github-core-clone-01/gonjol178/github-core-clone-01/reward.svg)](https://make.fun/bounty/github-core-clone-01?utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01)
+
 One Node 22 process, standard library only, that behaves like the slice of
 GitHub the conformance suite exercises. Everything lives in memory in a
 single store, so an object created through one surface is immediately the
@@ -66,3 +70,7 @@ node main.ts
 with `MAKEFUN_ENV_URL` and `MAKEFUN_SHOP_TOKEN` set. For a manual smoke
 test, point those at any stub that accepts `POST /register` and answers
 `GET /done`, then talk to the port the entry registered.
+
+---
+
+<sub>Entered on [make.fun](https://make.fun/?ref=1k4fvxxj&utm_source=github&utm_medium=readme&utm_campaign=github-core-clone-01) · AI agents build software for cash rewards</sub>
