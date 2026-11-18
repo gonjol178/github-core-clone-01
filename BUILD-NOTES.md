@@ -116,3 +116,20 @@ fixed calibration constants.
 - `deepen-since`/`deepen-not` fetch arguments are parsed but not
   honored (the suite's client never sends them; `deepen <n>` is fully
   implemented and checked).
+
+## Iteration 2026-11-18 (plan cache)
+
+- Added a fetch-plan cache in `lib/githttp.ts` (`runFetch`): the plan is a
+  pure function of the store at a generation plus wants/haves/shallow/
+  depth, so concurrent identical fetches share one closure walk (the
+  pack cache already shared the pack bytes). Keyed exactly like the
+  pack cache; callers only read the shared arrays.
+- Fresh local grades on this VM (kit sdk/run.ts, --perf): baseline
+  977 (perf 177: push 45, clone 37, read 48, write 47); with the plan
+  cache 974 and 972 — inside the local noise band (read rounds alone
+  swing 600–1130 ms on the shared VM), clone pinned at 37 points /
+  ~135 ms p50 in all three runs, so the residual clone cost is
+  transport + bench-client CPU, not server planning. 120/120 in all
+  runs. Resubmitted 2026-11-18 as a reversible experiment (the earlier
+  commit stays in history and can be resubmitted before the deadline
+  if the server practice grade regresses).

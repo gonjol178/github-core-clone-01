@@ -176,8 +176,25 @@ function sidebandPackets(pack: Buffer): Buffer[] {
   return packets;
 }
 
+const planCache = new Map<string, ReturnType<typeof planFetch>>();
+
 function runFetch(repo: RepoRecord, args: FetchArgs): { shallow: string[]; unshallow: string[]; pack: Buffer } {
-  const plan = planFetch(repo.store, args.wants, args.haves, args.shallow, args.depth);
+  // The plan is a pure function of the store at a generation plus the
+  // request's wants/haves/shallow/depth; concurrent identical fetches
+  // (the clone bench runs 50 at once) share one closure walk.
+  const key = [
+    repo.generation,
+    args.wants.join(','),
+    args.haves.join(','),
+    [...args.shallow].sort().join(','),
+    args.depth ?? '',
+  ].join('|');
+  let plan = planCache.get(key);
+  if (!plan) {
+    plan = planFetch(repo.store, args.wants, args.haves, args.shallow, args.depth);
+    if (planCache.size > 128) planCache.clear();
+    planCache.set(key, plan);
+  }
   return { shallow: plan.shallow, unshallow: plan.unshallow, pack: fetchPack(repo, plan) };
 }
 
